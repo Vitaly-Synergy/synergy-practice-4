@@ -140,13 +140,20 @@ ConnectionString := 'Server=YOUR_SERVER;Database=TaskManager;UID=your_user;PWD=y
 
 ##  Скриншоты
 
-`create_task.png` - создание задачи
-`create_user.png` - регистрация
-`delphi.png` - экран среды разработки Delphi 12 Community
-`edit_task.png` - редактирование/просмотр задачи
-`iis.png` - экран IIS
-`login.png` - логин пользователя
-`tasks.png` - список задач
+[screenshots/create_task.png](`create_task.png`) - создание задачи
+
+[screenshots/create_user.png](`create_user.png`) - регистрация
+
+[screenshots/delphi.png](`delphi.png`) - экран среды разработки Delphi 12 Community
+
+[screenshots/edit_task.png](`edit_task.png`) - редактирование/просмотр задачи
+
+[screenshots/iis.png](`iis.png`) - экран IIS
+
+[screenshots/login.png](`login.png`) - логин пользователя
+
+[screenshots/tasks.png](`tasks.png`) - список задач
+
 ``
 
 ## Лицензия
