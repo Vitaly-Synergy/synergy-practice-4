@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Редактирование задачи</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        h1, h2 { color: #333; }
+        .task-info { background: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .task-info p { margin: 5px 0; }
+        .task-info strong { display: inline-block; width: 120px; }
+        form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; }
+        label { font-weight: bold; }
+        select, input, textarea { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px; background-color: #2c7be5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover { background-color: #1a68c9; }
+        button:disabled { background-color: #a0c4e8; cursor: not-allowed; }
+        .message { padding: 10px; margin-top: 10px; border-radius: 4px; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }
+        th { background-color: #f5f5f5; }
+        nav { margin-bottom: 20px; padding: 10px; background-color: #f5f5f5; border-radius: 4px; }
+        nav a { margin-right: 15px; color: #2c7be5; text-decoration: none; }
+        nav a:hover { text-decoration: underline; }
+        .loading { text-align: center; padding: 20px; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="tasks.html">← Список задач</a>
+        <a href="create_task.html">+ Новая задача</a>
+    </nav>
+
+    <h1>Задача #<span id="taskIdDisplay">...</span></h1>
+
+    <div id="loading" class="loading">Загрузка задачи...</div>
+    <div id="message" class="message"></div>
+
+    <!-- Информация о задаче -->
+    <div id="taskInfo" class="task-info" style="display: none;">
+        <p><strong>Название:</strong> <span id="taskTitle"></span></p>
+        <p><strong>Описание:</strong> <span id="taskDesc"></span></p>
+        <p><strong>Статус:</strong> <span id="taskStatus"></span></p>
+        <p><strong>Приоритет:</strong> <span id="taskPriority"></span></p>
+        <p><strong>Создана:</strong> <span id="taskCreated"></span></p>
+    </div>
+
+    <!-- Форма смены статуса -->
+    <div id="statusFormBlock" style="display: none;">
+        <h2>Редактирование задачи</h2>
+        <form id="editTaskForm">
+            <label for="editTitle">Название:</label>
+            <input type="text" id="editTitle" required>
+
+            <label for="editDesc">Описание:</label>
+            <textarea id="editDesc"></textarea>
+
+            <label for="editAssignedTo">Назначено:</label>
+            <select id="editAssignedTo">
+                <option value="">-- Не назначен --</option>
+            </select>
+
+            <button type="submit" id="editTaskBtn">Сохранить изменения</button>
+        </form>
+        <hr>
+        <h2>Изменить статус</h2>
+        <form id="statusForm">
+            <label for="newStatus">Новый статус:</label>
+            <select id="newStatus" name="newStatus">
+                <option value="1">Новая (1)</option>
+                <option value="2">В работе (2)</option>
+                <option value="3">Завершена (3)</option>
+            </select>
+
+            <label for="statusComment">Комментарий (необязательно):</label>
+            <input type="text" id="statusComment" name="statusComment" placeholder="Например: Взял в работу">
+
+            <button type="submit" id="statusBtn">Сменить статус</button>
+        </form>
+    </div>
+
+    <!-- История статусов -->
+    <div id="historyBlock" style="display: none;">
+        <h2>История изменений статуса</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Было</th>
+                    <th>Стало</th>
+                    <th>Кто изменил</th>
+                    <th>Комментарий</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = '/TaskManager/TaskManager.dll/api';
+        const token = localStorage.getItem('jwt');
+
+        // ПРОВЕРКА АВТОРИЗАЦИИ
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        // ПОЛУЧЕНИЕ ID ЗАДАЧИ ИЗ URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const taskId = parseInt(urlParams.get('id'), 10);
+
+        if (!taskId || isNaN(taskId)) {
+            document.getElementById('loading').textContent = 'Ошибка: не указан ID задачи в URL.';
+        } else {
+            document.getElementById('taskIdDisplay').textContent = taskId;
+            loadTask();
+            loadHistory();
+        }
+
+        function showMessage(text, isError) {
+            const box = document.getElementById('message');
+            box.textContent = text;
+            box.className = 'message ' + (isError ? 'error' : 'success');
+            box.style.display = 'block';
+        }
+
+        function authHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            };
+        }
+
+        // ЗАГРУЗКА ДАННЫХ ЗАДАЧИ
+        async function loadTask() {
+            try {
+                const resp = await fetch(API_BASE + '/tasks/details?id=' + taskId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (resp.status === 401) {
+                    localStorage.removeItem('jwt');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                if (!resp.ok) {
+                    document.getElementById('loading').textContent = 'Задача не найдена.';
+                    return;
+                }
+
+                const task = await resp.json();
+                await loadUsersForEdit(task.AssignedTo);
+                renderTask(task);
+            } catch (err) {
+                document.getElementById('loading').textContent = 'Ошибка загрузки: ' + err.message;
+            }
+        }
+
+        function renderTask(task) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('taskInfo').style.display = 'block';
+            document.getElementById('statusFormBlock').style.display = 'block';
+
+            document.getElementById('taskTitle').textContent = task.Title || '—';
+            document.getElementById('taskDesc').textContent = task.Description || '—';
+            document.getElementById('taskStatus').textContent = task.StatusName || ('ID: ' + task.StatusID);
+            document.getElementById('taskPriority').textContent = task.PriorityName || ('ID: ' + task.PriorityID);
+            document.getElementById('taskCreated').textContent = task.CreatedAt || '—';
+            document.getElementById('editTitle').value = task.Title || '';
+            document.getElementById('editDesc').value = task.Description || '';
+
+            // Устанавливаем текущий статус в селекте
+            document.getElementById('newStatus').value = task.StatusID || '1';
+        }
+
+        // СМЕНА СТАТУСА
+        document.getElementById('statusForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('statusBtn');
+            btn.disabled = true;
+            btn.textContent = 'Отправка...';
+
+            const data = {
+                task_id: taskId,
+                new_status_id: parseInt(document.getElementById('newStatus').value, 10),
+                comment: document.getElementById('statusComment').value.trim()
+            };
+
+            try {
+                const resp = await fetch(API_BASE + '/tasks/status', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify(data)
+                });
+
+                const text = await resp.text();
+                let result;
+                try { result = JSON.parse(text); } catch(err) { result = { message: text }; }
+
+                if (resp.status === 401) {
+                    localStorage.removeItem('jwt');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                if (!resp.ok) {
+                    showMessage('Ошибка: ' + (result.error || result.message || text), true);
+                } else {
+                    showMessage('Статус успешно изменён!', false);
+                    // Перезагружаем данные задачи и историю
+                    loadTask().then();
+                    loadHistory().then();
+                }
+            } catch (err) {
+                showMessage('Сетевая ошибка: ' + err.message, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Сменить статус';
+            }
+        });
+
+        // Загрузка пользователей для селекта назначения
+        async function loadUsersForEdit(currentAssignedId) {
+            try {
+                const resp = await fetch(API_BASE + '/users', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) return;
+                const users = await resp.json();
+                const select = document.getElementById('editAssignedTo');
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.userID;
+                    option.textContent = user.fullName;
+                    if (parseInt(option.value, 10) === currentAssignedId) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        // Обработчик сохранения общих данных
+        document.getElementById('editTaskForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('editTaskBtn');
+            btn.disabled = true;
+            btn.textContent = 'Сохранение...';
+
+            const data = {
+                title: document.getElementById('editTitle').value.trim(),
+                description: document.getElementById('editDesc').value.trim(),
+                assigned_to: parseInt(document.getElementById('editAssignedTo').value, 10) || 0
+            };
+
+            try {
+                const resp = await fetch(API_BASE + '/tasks?id=' + taskId, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (resp.ok) {
+                    showMessage('Задача обновлена!', false);
+                    loadTask().then(); // Перезагрузить данные
+                } else {
+                    showMessage('Ошибка сохранения', true);
+                }
+            } catch (err) {
+                showMessage('Сетевая ошибка', true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Сохранить изменения';
+            }
+        });
+
+        // Загрузка истории статусов
+        async function loadHistory() {
+            try {
+                const resp = await fetch(API_BASE + '/tasks/history?task_id=' + taskId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (!resp.ok) return;
+
+                const history = await resp.json();
+                renderHistory(history);
+            } catch (err) {
+                // История не критична, просто не показываем
+            }
+        }
+
+        function renderHistory(history) {
+            const block = document.getElementById('historyBlock');
+            const tbody = document.getElementById('historyBody');
+            block.style.display = 'block';
+
+            if (!history || history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">История пуста</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            history.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.changedAt || '—'}</td>
+                    <td>${item.oldStatus || '—'}</td>
+                    <td>${item.newStatus || '—'}</td>
+                    <td>${item.changedBy || '—'}</td>
+                    <td>${item.comment || '—'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>

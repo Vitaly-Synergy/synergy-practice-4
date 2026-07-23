@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Создание задачи</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+        h1 { color: #333; }
+        form { display: flex; flex-direction: column; gap: 10px; }
+        label { font-weight: bold; }
+        input, textarea, select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        textarea { resize: vertical; min-height: 80px; }
+        button { padding: 10px; background-color: #2c7be5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover { background-color: #1a68c9; }
+        button:disabled { background-color: #a0c4e8; cursor: not-allowed; }
+        .message { padding: 10px; margin-top: 15px; border-radius: 4px; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        nav { margin-bottom: 20px; padding: 10px; background-color: #f5f5f5; border-radius: 4px; }
+        nav a { margin-right: 15px; color: #2c7be5; text-decoration: none; }
+        nav a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="login.html">Вход</a>
+        <a href="create_user.html">Регистрация</a>
+        <a href="tasks.html">Список задач</a>
+        <a href="create_task.html" style="font-weight: bold;">+ Новая задача</a>
+    </nav>
+
+    <h1>Создание новой задачи</h1>
+
+    <form id="taskForm">
+        <label for="title">Название задачи:</label>
+        <input type="text" id="title" name="title" required>
+
+        <label for="description">Описание:</label>
+        <textarea id="description" name="description"></textarea>
+
+        <label for="status_id">Статус:</label>
+        <select id="status_id" name="status_id">
+            <option value="1">Новая (1)</option>
+            <option value="2">В работе (2)</option>
+            <option value="3">Завершена (3)</option>
+        </select>
+
+        <label for="priority_id">Приоритет:</label>
+        <select id="priority_id" name="priority_id">
+            <option value="1">Низкий (1)</option>
+            <option value="2" selected>Средний (2)</option>
+            <option value="3">Высокий (3)</option>
+        </select>
+        <label for="assigned_to">Назначить пользователю:</label>
+        <select id="assigned_to" name="assigned_to">
+            <option value="">-- Не назначен --</option>
+        </select>
+        <button type="submit" id="submitBtn">Создать задачу</button>
+    </form>
+
+    <div id="message" class="message"></div>
+
+    <script>
+        const form = document.getElementById('taskForm');
+        const messageBox = document.getElementById('message');
+        const submitBtn = document.getElementById('submitBtn');
+        const API_BASE = '/TaskManager/TaskManager.dll/api';
+
+        function showMessage(text, isError) {
+            messageBox.textContent = text;
+            messageBox.className = 'message ' + (isError ? 'error' : 'success');
+            messageBox.style.display = 'block';
+        }
+
+        // Проверка авторизации при загрузке
+        const token = localStorage.getItem('jwt');
+        if (!token) {
+            window.location.href = 'login.html';
+        }
+
+        async function loadUsersToSelect(selectElementId, defaultUserId) {
+            try {
+                const resp = await fetch(API_BASE + '/users', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) return;
+
+                const users = await resp.json();
+                const select = document.getElementById(selectElementId);
+
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.userID;
+                    option.textContent = user.fullName;
+                    if (parseInt(option.value, 10) === defaultUserId) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Ошибка загрузки пользователей:', err);
+            }
+        }
+
+        // При загрузке страницы получаем текущего пользователя и загружаем список
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const meResp = await fetch(API_BASE + '/users/me', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (meResp.ok) {
+                    const me = await meResp.json();
+                    const currentUserId = me.UserID || me.userId;
+                    await loadUsersToSelect('assigned_to', currentUserId);
+                }
+            } catch (err) {
+                console.error('Ошибка получения текущего пользователя:', err);
+            }
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            messageBox.style.display = 'none';
+
+            const taskData = {
+                title: document.getElementById('title').value.trim(),
+                description: document.getElementById('description').value.trim(),
+                status_id: parseInt(document.getElementById('status_id').value, 10),
+                priority_id: parseInt(document.getElementById('priority_id').value, 10),
+                assigned_to: parseInt(document.getElementById('assigned_to').value, 10) || 0 // 0 если не выбран
+            };
+
+            if (!taskData.title) {
+                showMessage('Название задачи обязательно для заполнения.', true);
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Создание...';
+
+                // Отправка запроса с заголовком authorization
+                const response = await fetch(API_BASE + '/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(taskData)
+                });
+
+                const responseText = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (err) {
+                    result = { message: responseText };
+                }
+
+                // Обработка ответа
+                if (response.status === 401) {
+                    localStorage.removeItem('jwt');
+                    showMessage('Сессия истекла. Пожалуйста, войдите снова.', true);
+                    setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+                    return;
+                }
+
+                if (!response.ok) {
+                    showMessage('Ошибка создания: ' + (result.message || result.error || responseText), true);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Создать задачу';
+                    return;
+                }
+
+                showMessage('Задача успешно создана! (ID: ' + (result.task_id || 'N/A') + ')', false);
+                form.reset();
+
+                // Перенаправление на список задач через 1 секунду
+                setTimeout(() => {
+                    window.location.href = 'tasks.html';
+                }, 1000);
+
+            } catch (err) {
+                showMessage('Сетевая ошибка: ' + err.message, true);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Создать задачу';
+            }
+        });
+    </script>
+</body>
+</html>

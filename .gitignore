@@ -1,0 +1,76 @@
+# ==================== Delphi ====================
+# Compiled files
+*.dcu
+*.dcuil
+*.dcp
+*.obj
+*.o
+*.hpp
+*.h~
+*.c~
+*.pas~
+
+# Executables and libraries
+*.exe
+*.dll
+*.bpl
+*.dpl
+*.map
+*.tds
+*.stat
+
+# IDE history and cache
+__history/
+__recovery/
+*.identcache
+*.dproj.local
+*.local
+*.rsm
+*.ddp
+*.cfg
+*.~*
+
+# Build directories
+Win32/
+Win64/
+Android64/
+iOSDevice64/
+iOSSimulator/
+
+# Debugger
+*.dsk
+*.log
+
+# ==================== Python (PyCharm) ====================
+# Исключаем все Python-зависимости (PyCharm только как редактор)
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.egg-info/
+dist/
+build/
+*.pyc
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# ==================== Web/General ====================
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+~$*
